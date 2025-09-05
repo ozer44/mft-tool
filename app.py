@@ -61,23 +61,28 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
 # SQL Server Configuration
 from urllib.parse import quote_plus
 
+# Azure SQL Server Configuration (for production)
+# Use environment variables if available, otherwise use defaults
 params = {
-    'DRIVER': '{ODBC Driver 17 for SQL Server}',
-    'SERVER': 'pmbomft.database.windows.net',
-    'UID': 'mbomft_admin',
-    'PWD': 'Pp123456Pp123456'
-#    'SERVER': 'DESKTOP-E62JOKI\SQLEXPRESS',
-#    'DATABASE': 'mbo-mft',
-#    'UID': 'mft_user',
-#    'PWD': '123456'
-#}
-
-#params = {
-#    'DRIVER': '{ODBC Driver 17 for SQL Server}',
-#    'SERVER': 't152b0000074',
-#    'DATABASE': 'MFTDB_Test',
-#    'Trusted_Connection': 'yes'
+    'DRIVER': os.getenv('DB_DRIVER', '{ODBC Driver 17 for SQL Server}'),
+    'SERVER': os.getenv('DB_SERVER', 'pmbomft.database.windows.net'),
+    'DATABASE': os.getenv('DB_NAME', 'mbo-mft'),
+    'UID': os.getenv('DB_USER', 'mbomft_admin'),
+    'PWD': os.getenv('DB_PASSWORD', 'Pp123456Pp123456'),
+    'Encrypt': 'yes',
+    'TrustServerCertificate': 'no',
+    'Connection Timeout': '30'
 }
+
+# Local SQL Server Configuration (for development)
+# Uncomment below and comment above for local development
+# params = {
+#     'DRIVER': '{ODBC Driver 17 for SQL Server}',
+#     'SERVER': 'DESKTOP-E62JOKI\SQLEXPRESS',
+#     'DATABASE': 'mbo-mft',
+#     'UID': 'mft_user',
+#     'PWD': '123456'
+# }
 
 conn_str = ';'.join(f"{k}={v}" for k, v in params.items())
 
@@ -89,6 +94,14 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_size': 10,
     'max_overflow': 20
 }
+
+# Add error handling for database connection
+try:
+    print(f"Attempting to connect to database: {params['SERVER']}")
+    print(f"Database: {params['DATABASE']}")
+    print(f"User: {params['UID']}")
+except Exception as e:
+    print(f"Database configuration error: {e}")
 
 # Ensure uploads directory exists and has proper permissions
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
@@ -527,6 +540,27 @@ class RestApiConnection(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Azure"""
+    try:
+        # Test database connection
+        db.session.execute('SELECT 1')
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'server': params['SERVER'],
+            'database_name': params['DATABASE']
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'database': 'disconnected',
+            'error': str(e),
+            'server': params['SERVER'],
+            'database_name': params['DATABASE']
+        }), 500
 
 @app.route('/')
 @login_required
@@ -1475,67 +1509,6 @@ def system_settings():
         return redirect(url_for('system_settings'))
 
     return render_template('system_settings.html', settings=settings)
-
-
-@app.route('/database_settings', methods=['GET', 'POST'])
-@login_required
-def database_settings():
-    """Database connection management page"""
-    if not current_user.is_admin:
-        flash('Only administrators can access database settings.', 'warning')
-        return redirect(url_for('index'))
-    
-    if request.method == 'POST':
-        action = request.form.get('action')
-        
-        if action == 'switch_database':
-            database_type = request.form.get('database_type')
-            if db_config.switch_database(database_type):
-                # Update the Flask app configuration
-                app.config['SQLALCHEMY_DATABASE_URI'] = db_config.get_connection_string()
-                
-                # Recreate the database connection
-                db.init_app(app)
-                
-                flash(f'Database switched to {database_type.upper()} successfully!', 'success')
-            else:
-                flash('Invalid database type selected.', 'error')
-        
-        elif action == 'test_connection':
-            database_type = request.form.get('database_type')
-            # Validate configuration first
-            is_valid, validation_msg = db_config.validate_config(database_type)
-            if not is_valid:
-                flash(f'{database_type.upper()} configuration validation failed: {validation_msg}', 'error')
-            else:
-                # Test the connection
-                success, test_msg = db_config.test_connection(database_type)
-                if success:
-                    flash(f'{database_type.upper()} database connection test successful!', 'success')
-                else:
-                    flash(f'{database_type.upper()} database connection test failed: {test_msg}', 'error')
-        
-        return redirect(url_for('database_settings'))
-    
-    # Get current database information
-    current_db_info = db_config.get_database_info()
-    local_info = {
-        'type': 'local',
-        'server': db_config.local_config['SERVER'],
-        'database': db_config.local_config['DATABASE'],
-        'user': db_config.local_config['UID']
-    }
-    azure_info = {
-        'type': 'azure',
-        'server': db_config.azure_config['SERVER'],
-        'database': db_config.azure_config['DATABASE'],
-        'user': db_config.azure_config['UID']
-    }
-    
-    return render_template('database_settings.html', 
-                         current_db=current_db_info,
-                         local_db=local_info,
-                         azure_db=azure_info)
 
 
 @app.route('/user_management')
@@ -4604,6 +4577,22 @@ def event_rule_detail(connection_id, rule_id):
     else:
         flash('Event rule detayları alınamadı.', 'error')
         return redirect(url_for('event_rules', connection_id=connection_id))
+
+# Error handlers for better debugging
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle 500 Internal Server Error"""
+    print(f"Internal Server Error: {error}")
+    return render_template('error.html', 
+                         error_code=500, 
+                         error_message="Internal Server Error. Please check the logs."), 500
+
+@app.errorhandler(404)
+def not_found_error(error):
+    """Handle 404 Not Found Error"""
+    return render_template('error.html', 
+                         error_code=404, 
+                         error_message="Page not found."), 404
 
 if __name__ == '__main__':
     with app.app_context():
