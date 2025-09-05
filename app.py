@@ -63,8 +63,8 @@ from urllib.parse import quote_plus
 
 params = {
     'DRIVER': '{ODBC Driver 17 for SQL Server}',
-    'SERVER': 'mftsql2.database.windows.net',
-    'UID': 'mft_user',
+    'SERVER': 'pmbomft.database.windows.net',
+    'UID': 'mbomft_admin',
     'PWD': 'Pp123456Pp123456'
 #    'SERVER': 'DESKTOP-E62JOKI\SQLEXPRESS',
 #    'DATABASE': 'mbo-mft',
