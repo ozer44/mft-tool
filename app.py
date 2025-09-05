@@ -67,7 +67,7 @@ params = {
     'UID': 'mbomft_admin',
     'PWD': 'Pp123456Pp123456'
 #    'SERVER': 'DESKTOP-E62JOKI\SQLEXPRESS',
-#    'DATABASE': 'mbo-mft',
+    'DATABASE': 'PMboMft',
 #    'UID': 'mft_user',
 #    'PWD': '123456'
 #}
