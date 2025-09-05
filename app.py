@@ -63,13 +63,13 @@ from urllib.parse import quote_plus
 
 params = {
     'DRIVER': '{ODBC Driver 17 for SQL Server}',
-#   'SERVER': 'mftsql2.database.windows.net',
-#    'UID': 'mft_user',
-#    'PWD': 'Pp123456Pp123456'
-    'SERVER': 'DESKTOP-E62JOKI\SQLEXPRESS',
-    'DATABASE': 'mbo-mft',
+    'SERVER': 'mftsql2.database.windows.net',
     'UID': 'mft_user',
-    'PWD': '123456'
+    'PWD': 'Pp123456Pp123456'
+#    'SERVER': 'DESKTOP-E62JOKI\SQLEXPRESS',
+#    'DATABASE': 'mbo-mft',
+#    'UID': 'mft_user',
+#    'PWD': '123456'
 #}
 
 #params = {
@@ -1475,6 +1475,67 @@ def system_settings():
         return redirect(url_for('system_settings'))
 
     return render_template('system_settings.html', settings=settings)
+
+
+@app.route('/database_settings', methods=['GET', 'POST'])
+@login_required
+def database_settings():
+    """Database connection management page"""
+    if not current_user.is_admin:
+        flash('Only administrators can access database settings.', 'warning')
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        
+        if action == 'switch_database':
+            database_type = request.form.get('database_type')
+            if db_config.switch_database(database_type):
+                # Update the Flask app configuration
+                app.config['SQLALCHEMY_DATABASE_URI'] = db_config.get_connection_string()
+                
+                # Recreate the database connection
+                db.init_app(app)
+                
+                flash(f'Database switched to {database_type.upper()} successfully!', 'success')
+            else:
+                flash('Invalid database type selected.', 'error')
+        
+        elif action == 'test_connection':
+            database_type = request.form.get('database_type')
+            # Validate configuration first
+            is_valid, validation_msg = db_config.validate_config(database_type)
+            if not is_valid:
+                flash(f'{database_type.upper()} configuration validation failed: {validation_msg}', 'error')
+            else:
+                # Test the connection
+                success, test_msg = db_config.test_connection(database_type)
+                if success:
+                    flash(f'{database_type.upper()} database connection test successful!', 'success')
+                else:
+                    flash(f'{database_type.upper()} database connection test failed: {test_msg}', 'error')
+        
+        return redirect(url_for('database_settings'))
+    
+    # Get current database information
+    current_db_info = db_config.get_database_info()
+    local_info = {
+        'type': 'local',
+        'server': db_config.local_config['SERVER'],
+        'database': db_config.local_config['DATABASE'],
+        'user': db_config.local_config['UID']
+    }
+    azure_info = {
+        'type': 'azure',
+        'server': db_config.azure_config['SERVER'],
+        'database': db_config.azure_config['DATABASE'],
+        'user': db_config.azure_config['UID']
+    }
+    
+    return render_template('database_settings.html', 
+                         current_db=current_db_info,
+                         local_db=local_info,
+                         azure_db=azure_info)
 
 
 @app.route('/user_management')
