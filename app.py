@@ -66,7 +66,7 @@ from urllib.parse import quote_plus
 params = {
     'DRIVER': os.getenv('DB_DRIVER', '{ODBC Driver 17 for SQL Server}'),
     'SERVER': os.getenv('DB_SERVER', 'pmbomft.database.windows.net'),
-    'DATABASE': os.getenv('DB_NAME', 'mbo-mft'),
+    'DATABASE': os.getenv('DB_NAME', 'PMboMft'),
     'UID': os.getenv('DB_USER', 'mbomft_admin'),
     'PWD': os.getenv('DB_PASSWORD', 'Pp123456Pp123456'),
     'Encrypt': 'yes',
